@@ -210,6 +210,16 @@ class KakaoLink:
             follow_redirects=True,
         )
 
+        if res.url.path.startswith("/login"):
+            continue_url = res.url.params.get("continue")
+            await self._login(client)
+
+            res = await client.get(
+                continue_url,
+                headers={**self._get_web_headers()},
+                follow_redirects=True,
+            )
+
         if res.url.path.startswith("/talk_tms_auth/service"):
             logger.info("카카오링크 전송: 추가인증 해결 중")
             continue_url = await self._solve_two_factor_auth(client, res.text)
@@ -228,27 +238,31 @@ class KakaoLink:
         )["data"]
 
     async def init(self):
-        access_token = await self._token_provider.get_access_token()
         self._cookies = await self._cookie_storage.load()
 
         async with httpx.AsyncClient(cookies=self._cookies) as client:
-            authorized = await self._check_authorized(client)
-            if authorized:
-                return
+            await self._login(client)
 
-            tgt_token = await self._get_tgt_token(client, access_token)
-            await self._submit_tgt_token(client, tgt_token)
+    async def _login(self, client: httpx.AsyncClient):
+        access_token = await self._token_provider.get_access_token()
 
-            authorized = await self._check_authorized(client)
-            if not authorized:
-                logger.error(
-                    "카카오링크 로그인: 알 수 없는 이유로 로그인이 되지 않았습니다 (%s)",
-                    stack_info=True,
-                )
-                raise KakaoLinkLoginExcepetion()
+        authorized = await self._check_authorized(client)
+        if authorized:
+            return
 
-            self._cookies = dict(client.cookies)
-            await self._cookie_storage.save(self._cookies)
+        tgt_token = await self._get_tgt_token(client, access_token)
+        await self._submit_tgt_token(client, tgt_token)
+
+        authorized = await self._check_authorized(client)
+        if not authorized:
+            logger.error(
+                "카카오링크 로그인: 알 수 없는 이유로 로그인이 되지 않았습니다 (%s)",
+                stack_info=True,
+            )
+            raise KakaoLinkLoginExcepetion()
+
+        self._cookies = dict(client.cookies)
+        await self._cookie_storage.save(self._cookies)
 
     async def _solve_two_factor_auth(self, client: httpx.AsyncClient, tfa_html: str):
         try:
