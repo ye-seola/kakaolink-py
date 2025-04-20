@@ -45,9 +45,9 @@ class IKakaoLinkCookieStorage(abc.ABC):
         pass
 
 
-class IKakaoLinkTokenProvider(abc.ABC):
+class IKakaoLinkAuthorizationProvider(abc.ABC):
     @abc.abstractmethod
-    async def get_access_token(self) -> str:
+    async def get_authorization(self) -> str:
         pass
 
 
@@ -55,7 +55,7 @@ class KakaoLink:
     def __init__(
         self,
         cookie_storage: IKakaoLinkCookieStorage,
-        token_provider: IKakaoLinkTokenProvider,
+        authorization_provider: IKakaoLinkAuthorizationProvider,
         default_app_key: str | None = None,
         default_origin: str | None = None,
     ):
@@ -64,7 +64,7 @@ class KakaoLink:
 
         self._cookies = {}
         self._send_lock = asyncio.Lock()
-        self._token_provider = token_provider
+        self._authorization_provider = authorization_provider
         self._cookie_storage = cookie_storage
 
     async def send(
@@ -99,9 +99,16 @@ class KakaoLink:
                     client, app_key, ka, template_id, template_args
                 )
 
-                checksum = picker_data["checksum"]
-                csrf = picker_data["csrfToken"]
-                short_key = picker_data["shortKey"]
+                try:
+                    checksum = picker_data["checksum"]
+                    csrf = picker_data["csrfToken"]
+                    short_key = picker_data["shortKey"]
+                except KeyError:
+                    logging.error(
+                        "카카오링크 전송: 전송 실패 (%s)", picker_data, exc_info=True
+                    )
+                    raise KakaoLinkSendExcepetion()
+
                 receiver = self._picker_data_search(
                     receiver_name,
                     picker_data,
@@ -244,13 +251,13 @@ class KakaoLink:
             await self._login(client)
 
     async def _login(self, client: httpx.AsyncClient):
-        access_token = await self._token_provider.get_access_token()
+        authorization = await self._authorization_provider.get_authorization()
 
         authorized = await self._check_authorized(client)
         if authorized:
             return
 
-        tgt_token = await self._get_tgt_token(client, access_token)
+        tgt_token = await self._get_tgt_token(client, authorization)
         await self._submit_tgt_token(client, tgt_token)
 
         authorized = await self._check_authorized(client)

@@ -1,5 +1,5 @@
 import asyncio
-from kakaolink import IKakaoLinkCookieStorage, IKakaoLinkTokenProvider, KakaoLink
+from kakaolink import IKakaoLinkCookieStorage, IKakaoLinkAuthorizationProvider, KakaoLink
 
 
 async def main():
@@ -13,14 +13,14 @@ async def main():
         async def load(self):
             return self.local_storage
 
-    class KakaoTalkTokenProvider(IKakaoLinkTokenProvider):
-        async def get_access_token(self) -> str:
+    class KakaoTalkAuthorizationProvider(IKakaoLinkAuthorizationProvider):
+        async def get_authorization(self) -> str:
             return ""
 
     kl = KakaoLink(
         default_app_key=,
         default_origin=,
-        token_provider=KakaoTalkTokenProvider(),
+        authorization_provider=KakaoTalkAuthorizationProvider(),
         cookie_storage=KakaoLinkCookieStorage(),
     )
 
