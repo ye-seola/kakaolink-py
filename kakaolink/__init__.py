@@ -62,10 +62,10 @@ class KakaoLink:
         self.default_app_key = default_app_key
         self.default_origin = default_origin
 
-        self.cookies = {}
-        self.send_lock = asyncio.Lock()
-        self.token_provider = token_provider
-        self.cookie_storage = cookie_storage
+        self._cookies = {}
+        self._send_lock = asyncio.Lock()
+        self._token_provider = token_provider
+        self._cookie_storage = cookie_storage
 
     async def send(
         self,
@@ -93,8 +93,8 @@ class KakaoLink:
 
         ka = self._get_ka(origin)
 
-        async with self.send_lock:
-            async with httpx.AsyncClient(cookies=self.cookies) as client:
+        async with self._send_lock:
+            async with httpx.AsyncClient(cookies=self._cookies) as client:
                 picker_data = await self._get_picker_data(
                     client, app_key, ka, template_id, template_args
                 )
@@ -213,7 +213,6 @@ class KakaoLink:
         if res.url.path.startswith("/talk_tms_auth/service"):
             logger.info("카카오링크 전송: 추가인증 해결 중")
             continue_url = await self._solve_two_factor_auth(client, res.text)
-            print(continue_url)
 
             res = await client.get(
                 continue_url,
@@ -229,10 +228,10 @@ class KakaoLink:
         )["data"]
 
     async def init(self):
-        access_token = await self.token_provider.get_access_token()
-        self.cookies = await self.cookie_storage.load()
+        access_token = await self._token_provider.get_access_token()
+        self._cookies = await self._cookie_storage.load()
 
-        async with httpx.AsyncClient(cookies=self.cookies) as client:
+        async with httpx.AsyncClient(cookies=self._cookies) as client:
             authorized = await self._check_authorized(client)
             if authorized:
                 return
@@ -248,8 +247,8 @@ class KakaoLink:
                 )
                 raise KakaoLinkLoginExcepetion()
 
-            self.cookies = dict(client.cookies)
-            await self.cookie_storage.save(self.cookies)
+            self._cookies = dict(client.cookies)
+            await self._cookie_storage.save(self._cookies)
 
     async def _solve_two_factor_auth(self, client: httpx.AsyncClient, tfa_html: str):
         try:
@@ -415,6 +414,3 @@ class KakaoLink:
             "User-Agent": f"{ANDROID_WEBVIEW_UA} KAKAOTALK/{KAKAOTALK_VERSION} (INAPP)",
             "X-Requested-With": "com.kakao.talk",
         }
-
-    def _get_web_auth_headers(self):
-        return {}
